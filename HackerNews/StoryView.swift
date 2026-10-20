@@ -286,8 +286,9 @@ struct StoryView: View {
                     // The article gets the larger share: about a third for the story, 320–500pt.
                     storyColumn.frame(width: min(500, max(320, width * 0.35)))
                     Theme.ink.frame(width: 1)
-                    BrowserView(url: url, fillsSideStatus: true).id(url)
-                        .ignoresSafeArea(.container, edges: sideStatus.edges)
+                    BrowserView(url: url).id(url)
+                    // Beside a side status column (iPhone Duo) the article ends in a rule; the column stays blank.
+                    if sideStatus.edges == .trailing { Theme.ink.frame(width: 1) }
                 }
             } else {
                 storyColumn
