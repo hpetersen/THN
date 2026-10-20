@@ -5,6 +5,11 @@ struct PaperTopBar<Trailing: View>: View {
     var backTitle = "Front Page"
     @ViewBuilder var trailing: Trailing
     @Environment(\.dismiss) private var dismiss
+    @State private var width: CGFloat = 400
+    @State private var topInset: CGFloat = 50
+
+    /// Under ~380pt (iPhone Duo folded) the back link drops its title so the masthead fits.
+    private var compact: Bool { width < 380 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,10 +21,10 @@ struct PaperTopBar<Trailing: View>: View {
                     Button { dismiss() } label: {
                         HStack(spacing: 2) {
                             Image(systemName: "chevron.left").font(.system(size: 16, weight: .medium))
-                            Text(backTitle).font(Theme.body(16))
+                            if !compact { Text(backTitle).font(Theme.body(16)) }
                         }
                         .foregroundStyle(Theme.accent)
-                        .frame(minHeight: 44)
+                        .frame(minWidth: 44, minHeight: 44, alignment: .leading)
                         .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Back to \(backTitle.lowercased())")
@@ -29,10 +34,13 @@ struct PaperTopBar<Trailing: View>: View {
                 .font(.system(size: 18, weight: .light))
                 .foregroundStyle(Theme.ink)
             }
-            .padding(.horizontal, 10)
+            // With no status bar above (iPhone Duo unfolded), keep the controls off the rounded corners.
+            .padding(.horizontal, topInset < 24 ? 26 : 10)
             Rule(color: Theme.ink)
         }
         .background(Theme.paper)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
     }
 }
 
@@ -136,6 +144,67 @@ struct PaperTextArea: View {
     }
 }
 
+/// A status column down one side of the screen (iPhone Duo), found from lopsided side safe areas.
+struct SideStatus: Equatable {
+    var edges: Edge.Set = []
+    var inset: CGFloat = 0
+}
+
+private struct SideStatusKey: EnvironmentKey { static let defaultValue = SideStatus() }
+
+extension EnvironmentValues {
+    var sideStatus: SideStatus {
+        get { self[SideStatusKey.self] }
+        set { self[SideStatusKey.self] = newValue }
+    }
+}
+
+/// One side far larger than the other means the status sits down that side. Even insets,
+/// as on iPhone landscape, are left alone.
+private struct SideStatusDetector: ViewModifier {
+    @State private var status = SideStatus()
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.sideStatus, status)
+            .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { insets in
+                let gap = insets.trailing - insets.leading
+                status = gap > 40 ? SideStatus(edges: .trailing, inset: insets.trailing)
+                    : gap < -40 ? SideStatus(edges: .leading, inset: insets.leading) : SideStatus()
+            }
+    }
+}
+
+private struct UnderSideStatus: ViewModifier {
+    @Environment(\.sideStatus) private var status
+    func body(content: Content) -> some View { content.ignoresSafeArea(.container, edges: status.edges) }
+}
+
+/// Extends a rule through the status column to the screen edge; `margin` is any padding it sits in.
+private struct StretchUnderSideStatus: ViewModifier {
+    @Environment(\.sideStatus) private var status
+    var margin: CGFloat
+
+    func body(content: Content) -> some View {
+        let reach = status.edges.isEmpty ? 0 : status.inset + margin
+        content
+            .padding(.trailing, status.edges == .trailing ? -reach : 0)
+            .padding(.leading, status.edges == .leading ? -reach : 0)
+    }
+}
+
+extension View {
+    /// Applied to each screen: works out whether the status sits down one side.
+    func detectsSideStatus() -> some View { modifier(SideStatusDetector()) }
+
+    /// Applied to scrolling content: uses the full width, scrolling under a side status the way
+    /// content scrolls under the status bar. Fixed bars keep clear of it.
+    func underSideStatus() -> some View { modifier(UnderSideStatus()) }
+
+    /// Applied to section rules: runs them through the status column so each section closes edge to edge.
+    func stretchUnderSideStatus(margin: CGFloat = 0) -> some View { modifier(StretchUnderSideStatus(margin: margin)) }
+}
+
 /// Solid ink button with paper type, like "Read the full article".
 struct InkButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -193,6 +262,7 @@ struct PaperTabs<Item: Hashable>: View {
             }
             Rule(color: Theme.ink)
         }
+        .clipped()
     }
 }
 

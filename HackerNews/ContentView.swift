@@ -15,22 +15,24 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
+            // Each screen checks for a side status itself; modifiers around the stack don't reach them.
             FrontPageView(model: frontPage)
+                .detectsSideStatus()
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: Story.self) { story in
-                    StoryView(story: story, openBrowserOnAppear: launchScreen == "browser" && story.id == frontPage.autoStory)
+                    StoryView(story: story, openBrowserOnAppear: launchScreen == "browser" && story.id == frontPage.autoStory).detectsSideStatus()
                 }
                 .navigationDestination(for: UserRoute.self) { route in
-                    ProfileView(username: route.name)
+                    ProfileView(username: route.name).detectsSideStatus()
                 }
                 .navigationDestination(for: ItemRoute.self) { route in
-                    ItemLoaderView(id: route.id)
+                    ItemLoaderView(id: route.id).detectsSideStatus()
                 }
                 .navigationDestination(for: AccountRoute.self) { _ in
-                    AccountView()
+                    AccountView().detectsSideStatus()
                 }
                 .navigationDestination(for: SearchRoute.self) { _ in
-                    SearchView()
+                    SearchView().detectsSideStatus()
                 }
         }
         .environment(session)

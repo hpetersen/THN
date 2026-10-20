@@ -61,27 +61,66 @@ actor PreviewImageLoader {
 /// The story's preview image, or an engraved plate when the page has none.
 struct StoryImage: View {
     let story: Story
+    /// Show the whole image at its own shape (link previews are mostly ~1.9:1) instead of cropping it
+    /// to the caller's frame. Very tall or very wide images are kept between 1.2:1 and 2.4:1.
+    var fit = false
     @State private var image: UIImage?
+    @State private var boxRatio: CGFloat = 1
+    @State private var isTextCard = false
+
+    private var ratio: CGFloat {
+        guard let image, image.size.height > 0 else { return 1.91 }
+        return min(max(image.size.width / image.size.height, 1.2), 2.4)
+    }
 
     var body: some View {
+        if fit {
+            plate.aspectRatio(ratio, contentMode: .fit)
+        } else {
+            plate
+        }
+    }
+
+    private var plate: some View {
         Color.clear
             .overlay {
                 if let image {
+                    // Photos fill their box. A text card (e.g. GitHub's) loses words to any crop, so it is
+                    // shown whole on white, which blends into the card.
+                    let letterbox = !fit && isTextCard && abs(ratio / boxRatio - 1) > 0.03
                     Image(uiImage: image)
                         .resizable()
-                        .scaledToFill()
+                        .aspectRatio(contentMode: letterbox ? .fit : .fill)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(isTextCard ? Color.white : Theme.paper)
                         .transition(.opacity)
                 } else {
                     EngravingPlate(seed: story.id)
                 }
             }
             .clipped()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height > 0 ? $0.size.width / $0.size.height : 1 } action: { boxRatio = $0 }
             .accessibilityLabel(story.domain.map { "Preview image from \($0)" } ?? "Illustration")
             .task(id: story.id) {
                 guard image == nil, let url = story.link else { return }
                 let loaded = await PreviewImageLoader.shared.image(for: url)
+                isTextCard = loaded.map(Self.isMostlyWhite) ?? false
                 withAnimation(.easeOut(duration: 0.25)) { image = loaded }
             }
+    }
+}
+
+extension StoryImage {
+    /// True for text cards such as GitHub's: over half of a 16×16 sample is near-white.
+    static func isMostlyWhite(_ image: UIImage) -> Bool {
+        guard let cg = image.cgImage else { return false }
+        var pixels = [UInt8](repeating: 0, count: 16 * 16 * 4)
+        guard let ctx = CGContext(data: &pixels, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 64,
+                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return false }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: 16, height: 16))
+        let white = stride(from: 0, to: pixels.count, by: 4).filter { pixels[$0] > 235 && pixels[$0 + 1] > 235 && pixels[$0 + 2] > 235 }.count
+        return white > 128
     }
 }
 

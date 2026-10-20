@@ -244,6 +244,7 @@ struct StoryView: View {
     @State private var comments: CommentsModel
     @State private var browserLink: BrowserLink?
     @State private var showArticlePane = true
+    @State private var width: CGFloat = 1200
     @State private var composing: ComposeTarget?
     @State private var editingStory = false
     @State private var deleting: Int?
@@ -257,7 +258,9 @@ struct StoryView: View {
         _comments = State(initialValue: CommentsModel(story: story))
     }
 
-    private var splitWithBrowser: Bool { sizeClass == .regular && story.link != nil && showArticlePane }
+    /// The article opens beside the story only with room for both (iPad, not iPad 11" portrait or iPhone Duo).
+    private var canSplit: Bool { sizeClass == .regular && story.link != nil && width >= 1000 }
+    private var splitWithBrowser: Bool { canSplit && showArticlePane }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -267,7 +270,7 @@ struct StoryView: View {
                 }
                 .accessibilityLabel("Share")
                 storyMenu
-                if sizeClass == .regular && story.link != nil {
+                if canSplit {
                     Button {
                         withAnimation { showArticlePane.toggle() }
                     } label: {
@@ -279,7 +282,8 @@ struct StoryView: View {
             }
             if splitWithBrowser, let url = story.link {
                 HStack(spacing: 0) {
-                    storyColumn.frame(width: 500)
+                    // The article gets the larger share: about 40% for the story, at most 500pt.
+                    storyColumn.frame(width: min(500, width * 0.4))
                     Theme.ink.frame(width: 1)
                     BrowserView(url: url).id(url)
                 }
@@ -291,6 +295,7 @@ struct StoryView: View {
         .foregroundStyle(Theme.ink)
         .toolbar(.hidden, for: .navigationBar)
         .tint(Theme.accent)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .fullScreenCover(item: $browserLink) { link in
             BrowserView(url: link.url, story: link.url == story.link ? story : nil,
                         onClose: { browserLink = nil }, onShowComments: { browserLink = nil })
@@ -448,6 +453,7 @@ struct StoryView: View {
         // Keep the headline in view while the comment thread loads in below it.
         .defaultScrollAnchor(.top)
         .defaultScrollAnchor(.top, for: .sizeChanges)
+        .underSideStatus()
         }
     }
 
@@ -503,8 +509,7 @@ struct StoryView: View {
 
         if let url = story.link {
             if !splitWithBrowser {
-                StoryImage(story: story)
-                    .frame(height: 210)
+                StoryImage(story: story, fit: true)
                     .frame(maxWidth: .infinity)
                     .overlay(Rectangle().stroke(Theme.ink, lineWidth: 1))
                 Button {

@@ -25,6 +25,7 @@ struct FrontPageView: View {
     @Bindable var model: FrontPageModel
     @Environment(HNSession.self) private var session
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var width: CGFloat = 1200
 
     private var isPad: Bool { sizeClass == .regular }
 
@@ -40,7 +41,8 @@ struct FrontPageView: View {
                     } else if stories.isEmpty {
                         ProgressView().tint(Theme.ink).padding(.top, 80)
                     } else if isPad {
-                        PadFrontPage(stories: stories, feed: model.feed)
+                        // Below ~1000pt (iPad 11" portrait, iPhone Duo unfolded) In Brief moves under the lead.
+                        PadFrontPage(stories: stories, feed: model.feed, narrow: width < 1000)
                     } else {
                         PhoneFrontPage(stories: stories, feed: model.feed)
                     }
@@ -54,6 +56,8 @@ struct FrontPageView: View {
             .defaultScrollAnchor(.top)
             .defaultScrollAnchor(.top, for: .sizeChanges)
             .refreshable { await model.load() }
+            .underSideStatus()
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         }
         .background(Theme.paper)
         .foregroundStyle(Theme.ink)
@@ -76,7 +80,12 @@ struct Masthead: View {
             HStack {
                 Text("Vol. XX · No. \(Calendar.current.ordinality(of: .day, in: .year, for: .now) ?? 1)")
                 Spacer()
-                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day().year()))
+                // Long date when it fits, short ("Tue, 20 Oct 2026") on narrow screens.
+                ViewThatFits {
+                    Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day().year()))
+                    Text(Date.now.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year()))
+                }
+                .lineLimit(1)
                 // Account: sign-in when signed out, your profile when signed in.
                 NavigationLink(value: AccountRoute()) {
                     Image(systemName: session.isSignedIn ? "person.fill" : "person")
@@ -115,8 +124,9 @@ struct SectionStrip: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Rule(color: Theme.ink).padding(.top, 6)
-            ScrollView(.horizontal, showsIndicators: false) {
+            // The tabs stop before a side status; the rules run through it to close off the section.
+            Rule(color: Theme.ink).stretchUnderSideStatus(margin: centered ? 24 : 0).padding(.top, 6)
+            ZStack { ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: centered ? 34 : 20) {
                     ForEach(Feed.allCases) { feed in
                         Button {
@@ -144,8 +154,9 @@ struct SectionStrip: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity)
-            }
-            DoubleRule()
+            } }
+            .clipped()
+            DoubleRule().stretchUnderSideStatus(margin: centered ? 24 : 0)
         }
         .padding(.horizontal, centered ? 24 : 0)
     }
@@ -212,69 +223,35 @@ private struct PhoneFrontPage: View {
 private struct PadFrontPage: View {
     let stories: [Story]
     let feed: Feed
+    /// Lead story full width with In Brief below it, for widths too tight for the sidebar.
+    var narrow = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            HStack(alignment: .top, spacing: 0) {
-                VStack(alignment: .leading, spacing: 0) {
-                    NavigationLink(value: stories[0]) {
-                        HStack(alignment: .top, spacing: 20) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Kicker(story: stories[0])
-                                Text(stories[0].headline).font(Theme.headline(32, weight: .bold)).multilineTextAlignment(.leading)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                if let text = stories[0].text {
-                                    Text(HTMLText.plain(text)).font(Theme.body(15)).lineLimit(5)
-                                }
-                                MetaLine(story: stories[0], showAuthor: true)
-                            }
-                            .frame(width: 300, alignment: .leading)
-                            StoryImage(story: stories[0])
-                                .frame(height: 300)
-                                .frame(maxWidth: .infinity)
-                                .overlay(Rectangle().stroke(Theme.ink, lineWidth: 1))
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.bottom, 20)
-
-                    Rule()
-                    HStack(alignment: .top, spacing: 24) {
-                        ForEach(stories.dropFirst(1).prefix(2)) { story in
-                            ImageRightRow(story: story, thumb: 110).frame(maxWidth: .infinity)
-                        }
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 18)
+            if narrow {
+                VStack(alignment: .leading, spacing: 24) {
+                    leadColumn
+                    inBrief(columns: 2)
                 }
-                .padding(.trailing, 24)
-                .frame(maxWidth: .infinity)
-
-                Theme.ink.frame(width: 1)
-
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("In Brief")
-                        .font(Theme.body(15).smallCaps().weight(.semibold))
-                        .tracking(1.5)
+            } else {
+                HStack(alignment: .top, spacing: 0) {
+                    leadColumn
+                        .padding(.trailing, 24)
                         .frame(maxWidth: .infinity)
-                        .padding(.bottom, 6)
-                    Rule(color: Theme.ink)
-                    ForEach(Array(stories.dropFirst(3).prefix(5).enumerated()), id: \.element.id) { offset, story in
-                        BriefRow(story: story, number: offset + 4)
-                        Rule()
-                    }
+                    Theme.ink.frame(width: 1)
+                    inBrief(columns: 1)
+                        .padding(.leading, 24)
+                        .frame(width: 330)
                 }
-                .padding(.leading, 24)
-                .frame(width: 330)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .fixedSize(horizontal: false, vertical: true)
 
             if stories.count > 8 {
                 VStack(spacing: 0) {
                     DoubleRule()
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 24, alignment: .top), count: 4), spacing: 24) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 24, alignment: .top), count: narrow ? 2 : 4), spacing: 24) {
                         ForEach(stories.dropFirst(8).prefix(4)) { story in
-                            ImageCard(story: story, imageHeight: 140)
+                            ImageCard(story: story, imageHeight: narrow ? 180 : 140)
                         }
                     }
                     .padding(.top, 18)
@@ -289,6 +266,61 @@ private struct PadFrontPage: View {
                             BriefRow(story: story, number: offset + 13)
                             Rule()
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The lead story beside its image, then two image-right stories.
+    private var leadColumn: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            NavigationLink(value: stories[0]) {
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Kicker(story: stories[0])
+                        Text(stories[0].headline).font(Theme.headline(32, weight: .bold)).multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let text = stories[0].text {
+                            Text(HTMLText.plain(text)).font(Theme.body(15)).lineLimit(5)
+                        }
+                        MetaLine(story: stories[0], showAuthor: true)
+                    }
+                    .frame(width: narrow ? 260 : 300, alignment: .leading)
+                    StoryImage(story: stories[0])
+                        .frame(height: 300)
+                        .frame(maxWidth: .infinity)
+                        .overlay(Rectangle().stroke(Theme.ink, lineWidth: 1))
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 20)
+
+            Rule()
+            HStack(alignment: .top, spacing: 24) {
+                ForEach(stories.dropFirst(1).prefix(2)) { story in
+                    ImageRightRow(story: story, thumb: 110).frame(maxWidth: .infinity)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 18)
+        }
+    }
+
+    /// Stories four to eight as numbered briefs, in one column (sidebar) or two (narrow).
+    private func inBrief(columns: Int) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("In Brief")
+                .font(Theme.body(15).smallCaps().weight(.semibold))
+                .tracking(1.5)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 6)
+            Rule(color: Theme.ink)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 32, alignment: .top), count: columns), spacing: 0) {
+                ForEach(Array(stories.dropFirst(3).prefix(columns == 1 ? 5 : 4).enumerated()), id: \.element.id) { offset, story in
+                    VStack(spacing: 0) {
+                        BriefRow(story: story, number: offset + 4)
+                        Rule()
                     }
                 }
             }
@@ -326,8 +358,7 @@ struct LeadStory: View {
                 Text(story.headline)
                     .font(Theme.headline(headlineSize, weight: .bold))
                     .multilineTextAlignment(.leading)
-                StoryImage(story: story)
-                    .frame(height: imageHeight)
+                StoryImage(story: story, fit: true)
                     .frame(maxWidth: .infinity)
                     .overlay(Rectangle().stroke(Theme.ink, lineWidth: 1))
                 if let domain = story.domain {

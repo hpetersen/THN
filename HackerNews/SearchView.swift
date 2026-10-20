@@ -61,6 +61,7 @@ struct SearchView: View {
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.interactively)
+            .underSideStatus()
         }
         .background(Theme.paper)
         .foregroundStyle(Theme.ink)
