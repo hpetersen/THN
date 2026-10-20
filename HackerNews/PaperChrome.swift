@@ -10,8 +10,11 @@ struct PaperTopBar<Trailing: View>: View {
     @State private var width: CGFloat = 400
     @State private var topInset: CGFloat = 50
 
-    /// Under ~380pt (iPhone Duo folded) the back link drops its title so the masthead fits.
-    private var compact: Bool { width < 380 }
+    /// Corner padding when no status bar sits above the bar (iPhone Duo), else the usual 10pt.
+    private var sidePadding: CGFloat { topInset < 24 ? 26 : 10 }
+    /// When the room inside the padding is under ~365pt (iPhone Duo folded), the back link drops
+    /// its title so it doesn't run into the centred masthead.
+    private var compact: Bool { width - 2 * sidePadding < 365 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,7 +40,7 @@ struct PaperTopBar<Trailing: View>: View {
                 .foregroundStyle(Theme.ink)
             }
             // With no status bar above (iPhone Duo unfolded), keep the controls off the rounded corners.
-            .padding(.horizontal, topInset < 24 ? 26 : 10)
+            .padding(.horizontal, sidePadding)
             if doubleRule {
                 DoubleRule()
             } else {
