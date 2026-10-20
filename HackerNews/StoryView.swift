@@ -17,6 +17,10 @@ final class CommentsModel {
     private var initialVote = ItemLinks.Vote.none
     private var tree: [CommentNode] = []
     private var nextLocalID = -1
+    /// Comments posted here this visit, for the header count.
+    private(set) var postedCount = 0
+    /// The comment just posted, so the thread can scroll to and highlight it.
+    var justPosted: Int?
     private var rank: [Int]?
 
     init(story: Story) { self.story = story }
@@ -150,10 +154,28 @@ final class CommentsModel {
             nextLocalID -= 1
             if let parent { Self.update(&tree, id: parent) { $0.children.insert(node, at: 0) } } else { tree.insert(node, at: 0) }
             collapsed.remove(parent ?? 0)
+            postedCount += 1
+            rebuild()
+            justPosted = node.id
+            await adoptPostedID(node.id)
         case .edit(let c):
             Self.update(&tree, id: c.id) { $0.text = html }
+            rebuild()
         }
+    }
+
+    /// Swaps the placeholder id of a just-posted comment for its real HN id, so Edit and Delete work.
+    private func adoptPostedID(_ localID: Int) async {
+        guard let page = try? await HNWeb.itemPage(story.id) else { return }
+        links = page.links
+        var known = Set<Int>()
+        func collect(_ nodes: [CommentNode]) { for n in nodes { known.insert(n.id); collect(n.children) } }
+        collect(tree)
+        // Our newest comment is the highest id we may edit that the thread doesn't know yet.
+        guard let real = page.links.filter({ $0.value.edit != nil && !known.contains($0.key) }).keys.max() else { return }
+        Self.update(&tree, id: localID) { $0.id = real }
         rebuild()
+        if justPosted == localID { justPosted = real }
     }
 
     func delete(_ id: Int) async {
@@ -374,6 +396,7 @@ struct StoryView: View {
     }
 
     private var storyColumn: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 header
@@ -403,6 +426,8 @@ struct StoryView: View {
                     } onAction: { action in
                         handle(action, on: comment)
                     }
+                    .id(comment.id)
+                    .background(comments.justPosted == comment.id ? Theme.accent.opacity(0.08) : .clear)
                 }
             }
             .padding(.horizontal, sizeClass == .regular ? 24 : 16)
@@ -411,9 +436,19 @@ struct StoryView: View {
             .frame(maxWidth: 720)
             .frame(maxWidth: .infinity)
         }
+        .onChange(of: comments.justPosted) { old, id in
+            // Scroll to a new comment once; a later id swap (placeholder to real) keeps the position.
+            guard let id, old == nil else { return }
+            withAnimation(.easeInOut) { proxy.scrollTo(id, anchor: .center) }
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                withAnimation(.easeOut(duration: 0.6)) { comments.justPosted = nil }
+            }
+        }
         // Keep the headline in view while the comment thread loads in below it.
         .defaultScrollAnchor(.top)
         .defaultScrollAnchor(.top, for: .sizeChanges)
+        }
     }
 
     private func handle(_ action: CommentAction, on comment: Comment) {
@@ -531,7 +566,7 @@ private struct CommentsHeader: View {
         VStack(spacing: 0) {
             DoubleRule().padding(.top, 10)
             HStack(alignment: .firstTextBaseline) {
-                Text("Letters \(Text("— \(model.story.commentCount)").italic())")
+                Text("Letters \(Text("— \(model.story.commentCount + model.postedCount)").italic())")
                     .font(Theme.headline(22, weight: .bold))
                     .accessibilityAddTraits(.isHeader)
                 Spacer()

@@ -104,7 +104,7 @@ struct Story: Decodable, Identifiable, Hashable {
 
 /// A comment node from the Algolia items endpoint, which returns the whole tree in one call.
 struct CommentNode: Decodable {
-    let id: Int
+    var id: Int
     let author: String?
     var text: String?
     let created_at_i: TimeInterval?
