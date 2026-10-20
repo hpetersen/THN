@@ -56,7 +56,6 @@ struct FrontPageView: View {
             .defaultScrollAnchor(.top)
             .defaultScrollAnchor(.top, for: .sizeChanges)
             .refreshable { await model.load() }
-            .underSideStatus()
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         }
         .background(Theme.paper)
@@ -124,8 +123,7 @@ struct SectionStrip: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // The tabs stop before a side status; the rules run through it to close off the section.
-            Rule(color: Theme.ink).stretchUnderSideStatus(margin: centered ? 24 : 0).padding(.top, 6)
+            Rule(color: Theme.ink).padding(.top, 6)
             ZStack { ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: centered ? 34 : 20) {
                     ForEach(Feed.allCases) { feed in
@@ -156,7 +154,7 @@ struct SectionStrip: View {
                 .frame(maxWidth: .infinity)
             } }
             .clipped()
-            DoubleRule().stretchUnderSideStatus(margin: centered ? 24 : 0)
+            DoubleRule()
         }
         .padding(.horizontal, centered ? 24 : 0)
     }

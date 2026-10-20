@@ -39,7 +39,7 @@ struct ContentView: View {
         .tint(Theme.accent)
         .preferredColorScheme(.light)
         .sheet(isPresented: $session.showSignIn) {
-            SignInSheet().environment(session)
+            SignInSheet().environment(session).detectsSideStatus()
         }
         .extrasPresentations()
         .task {

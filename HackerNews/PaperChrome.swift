@@ -165,14 +165,20 @@ extension EnvironmentValues {
     }
 }
 
-/// One side far larger than the other means the status sits down that side. Even insets,
+/// THN never extends into a side status column: the page ends in a full-height ink rule and the
+/// column stays blank paper. One side far larger than the other marks the column; even insets,
 /// as on iPhone landscape, are left alone.
-private struct SideStatusDetector: ViewModifier {
+private struct SideStatusBorder: ViewModifier {
     @State private var status = SideStatus()
 
     func body(content: Content) -> some View {
         content
             .environment(\.sideStatus, status)
+            .overlay(alignment: status.edges == .leading ? .leading : .trailing) {
+                if !status.edges.isEmpty {
+                    Theme.ink.frame(width: 1).ignoresSafeArea(edges: .vertical)
+                }
+            }
             .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { insets in
                 let gap = insets.trailing - insets.leading
                 status = gap > 40 ? SideStatus(edges: .trailing, inset: insets.trailing)
@@ -181,34 +187,9 @@ private struct SideStatusDetector: ViewModifier {
     }
 }
 
-private struct UnderSideStatus: ViewModifier {
-    @Environment(\.sideStatus) private var status
-    func body(content: Content) -> some View { content.ignoresSafeArea(.container, edges: status.edges) }
-}
-
-/// Extends a rule through the status column to the screen edge; `margin` is any padding it sits in.
-private struct StretchUnderSideStatus: ViewModifier {
-    @Environment(\.sideStatus) private var status
-    var margin: CGFloat
-
-    func body(content: Content) -> some View {
-        let reach = status.edges.isEmpty ? 0 : status.inset + margin
-        content
-            .padding(.trailing, status.edges == .trailing ? -reach : 0)
-            .padding(.leading, status.edges == .leading ? -reach : 0)
-    }
-}
-
 extension View {
-    /// Applied to each screen: works out whether the status sits down one side.
-    func detectsSideStatus() -> some View { modifier(SideStatusDetector()) }
-
-    /// Applied to scrolling content: uses the full width, scrolling under a side status the way
-    /// content scrolls under the status bar. Fixed bars keep clear of it.
-    func underSideStatus() -> some View { modifier(UnderSideStatus()) }
-
-    /// Applied to section rules: runs them through the status column so each section closes edge to edge.
-    func stretchUnderSideStatus(margin: CGFloat = 0) -> some View { modifier(StretchUnderSideStatus(margin: margin)) }
+    /// Applied to each screen and full-screen overlay: borders off a side status column (iPhone Duo).
+    func detectsSideStatus() -> some View { modifier(SideStatusBorder()) }
 }
 
 /// Solid ink button with paper type, like "Read the full article".

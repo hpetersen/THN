@@ -251,7 +251,6 @@ struct StoryView: View {
     @State private var reporting: Comment?
     @Environment(HNSession.self) private var session
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @Environment(\.sideStatus) private var sideStatus
 
     init(story: Story, openBrowserOnAppear: Bool = false) {
         self.story = story
@@ -287,8 +286,6 @@ struct StoryView: View {
                     storyColumn.frame(width: min(500, max(320, width * 0.35)))
                     Theme.ink.frame(width: 1)
                     BrowserView(url: url).id(url)
-                    // Beside a side status column (iPhone Duo) the article ends in a rule; the column stays blank.
-                    if sideStatus.edges == .trailing { Theme.ink.frame(width: 1) }
                 }
             } else {
                 storyColumn
@@ -302,9 +299,10 @@ struct StoryView: View {
         .fullScreenCover(item: $browserLink) { link in
             BrowserView(url: link.url, story: link.url == story.link ? story : nil,
                         onClose: { browserLink = nil }, onShowComments: { browserLink = nil })
+                .detectsSideStatus()
         }
         .sheet(item: $composing) { target in
-            ComposeSheet(target: target, story: story, model: comments)
+            ComposeSheet(target: target, story: story, model: comments).detectsSideStatus()
         }
         .sheet(isPresented: $editingStory) {
             if let href = comments.storyLinks?.edit {
@@ -456,7 +454,6 @@ struct StoryView: View {
         // Keep the headline in view while the comment thread loads in below it.
         .defaultScrollAnchor(.top)
         .defaultScrollAnchor(.top, for: .sizeChanges)
-        .underSideStatus()
         }
     }
 

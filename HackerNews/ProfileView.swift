@@ -91,7 +91,6 @@ struct ProfileView: View {
             }
             .defaultScrollAnchor(.top)
             .refreshable { await load() }
-            .underSideStatus()
         }
         .background(Theme.paper)
         .foregroundStyle(Theme.ink)
