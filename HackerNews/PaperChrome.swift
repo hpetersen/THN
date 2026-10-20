@@ -39,7 +39,7 @@ struct PaperTopBar<Trailing: View>: View {
             // With no status bar above (iPhone Duo unfolded), keep the controls off the rounded corners.
             .padding(.horizontal, topInset < 24 ? 26 : 10)
             if doubleRule {
-                DoubleRule().stretchUnderSideStatus()
+                DoubleRule()
             } else {
                 Rule(color: Theme.ink)
             }

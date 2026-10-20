@@ -251,6 +251,7 @@ struct StoryView: View {
     @State private var reporting: Comment?
     @Environment(HNSession.self) private var session
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.sideStatus) private var sideStatus
 
     init(story: Story, openBrowserOnAppear: Bool = false) {
         self.story = story
@@ -285,7 +286,8 @@ struct StoryView: View {
                     // The article gets the larger share: about a third for the story, 320–500pt.
                     storyColumn.frame(width: min(500, max(320, width * 0.35)))
                     Theme.ink.frame(width: 1)
-                    BrowserView(url: url).id(url)
+                    BrowserView(url: url, fillsSideStatus: true).id(url)
+                        .ignoresSafeArea(.container, edges: sideStatus.edges)
                 }
             } else {
                 storyColumn

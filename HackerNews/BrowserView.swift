@@ -56,14 +56,26 @@ struct BrowserView: View {
     let story: Story?
     var onClose: (() -> Void)?
     var onShowComments: (() -> Void)?
+    /// Beside the comments: the page runs under a side status column to the screen edge,
+    /// while the bars keep their buttons clear of it.
+    var fillsSideStatus = false
     @State private var model: BrowserModel
     @Environment(\.openURL) private var openURL
+    @Environment(\.sideStatus) private var sideStatus
 
-    init(url: URL, story: Story? = nil, onClose: (() -> Void)? = nil, onShowComments: (() -> Void)? = nil) {
+    init(url: URL, story: Story? = nil, onClose: (() -> Void)? = nil, onShowComments: (() -> Void)? = nil, fillsSideStatus: Bool = false) {
         self.story = story
         self.onClose = onClose
         self.onShowComments = onShowComments
+        self.fillsSideStatus = fillsSideStatus
         _model = State(initialValue: BrowserModel(url: url))
+    }
+
+    /// Extra room the bars keep from a side status the page runs under.
+    private var barInset: EdgeInsets {
+        guard fillsSideStatus else { return EdgeInsets() }
+        return EdgeInsets(top: 0, leading: sideStatus.edges == .leading ? sideStatus.inset : 0,
+                          bottom: 0, trailing: sideStatus.edges == .trailing ? sideStatus.inset : 0)
     }
 
     var body: some View {
@@ -110,6 +122,7 @@ struct BrowserView: View {
                 .accessibilityLabel("Text size")
             }
             .padding(.horizontal, 12)
+            .padding(barInset)
             GeometryReader { geo in
                 Theme.plate.overlay(alignment: .leading) {
                     Theme.accent.frame(width: geo.size.width * model.progress)
@@ -164,6 +177,7 @@ struct BrowserView: View {
             .font(.system(size: 19, weight: .light))
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 12)
+            .padding(barInset)
             .padding(.vertical, 2)
         }
         .background(Theme.paper)
