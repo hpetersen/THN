@@ -4,8 +4,8 @@ _Last updated: 20 October 2026_
 
 THN ("the app") is a reader for Hacker News, made by Henrik Petersen. This policy explains
 what happens to your data when you use it. The short version: **no advertising, no
-tracking across apps, no personal data.** The App Store version collects anonymous usage
-statistics, which you can switch off.
+tracking across other apps, nothing linked to your identity.** The App Store version
+collects anonymous usage statistics, which you can switch off.
 
 ## What the app does not do
 
