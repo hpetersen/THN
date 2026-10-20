@@ -67,6 +67,7 @@ struct ProfileView: View {
     @State private var lists = ListCache()
     @State private var sheet: Sheet?
     @State private var confirmSignOut = false
+    @State private var confirmBlock = false
 
     enum Sheet: String, Identifiable { case edit, submit; var id: String { rawValue } }
 
@@ -121,6 +122,11 @@ struct ProfileView: View {
         .confirmationDialog("Sign out of \(username)?", isPresented: $confirmSignOut, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive) { Task { await session.signOut() } }
         }
+        .confirmationDialog("Block \(username)?", isPresented: $confirmBlock, titleVisibility: .visible) {
+            Button("Block", role: .destructive) { session.setBlocked(username, true) }
+        } message: {
+            Text("Their stories and comments will be hidden on this device. You can unblock them here at any time.")
+        }
     }
 
     @ViewBuilder private var header: some View {
@@ -169,6 +175,12 @@ struct ProfileView: View {
             .buttonStyle(OutlineButtonStyle())
             .padding(.top, 4)
             ExtrasAccountSection()
+        } else if user != nil {
+            Button(session.isBlocked(username) ? "Unblock \(username)" : "Block \(username)") {
+                if session.isBlocked(username) { session.setBlocked(username, false) } else { confirmBlock = true }
+            }
+            .buttonStyle(OutlineButtonStyle(color: session.isBlocked(username) ? Theme.ink : Theme.accent))
+            .padding(.top, 4)
         }
     }
 
@@ -210,14 +222,15 @@ struct ProfileView: View {
 struct HitListView: View {
     let list: HitList
     var emptyText = "Nothing here."
+    @Environment(HNSession.self) private var session
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(list.stories) { story in
+            ForEach(list.stories.filter { !session.isBlocked($0.by) }) { story in
                 BriefRow(story: story, showAuthor: true)
                 Rule()
             }
-            ForEach(list.comments) { hit in
+            ForEach(list.comments.filter { !session.isBlocked($0.author) }) { hit in
                 CommentHitRow(hit: hit)
                 Rule()
             }

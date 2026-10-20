@@ -33,7 +33,7 @@ struct FrontPageView: View {
             Masthead(large: isPad)
             SectionStrip(selection: $model.feed, centered: isPad)
             ScrollView {
-                let stories = model.stories.filter { !session.hiddenStories.contains($0.id) }
+                let stories = model.stories.filter { !session.hiddenStories.contains($0.id) && !session.isBlocked($0.by) }
                 Group {
                     if let error = model.error {
                         ErrorNotice(message: error) { Task { await model.load() } }

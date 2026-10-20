@@ -12,6 +12,8 @@ final class HNSession {
     var showSignIn = false
     /// Stories hidden this session, so the front page drops them without a reload.
     var hiddenStories: Set<Int> = []
+    /// Users whose stories and comments are hidden on this device.
+    private(set) var blockedUsers = Set(UserDefaults.standard.stringArray(forKey: "blockedUsers") ?? [])
 
     var isSignedIn: Bool { username != nil }
 
@@ -50,6 +52,14 @@ final class HNSession {
         Keychain.delete()
         username = nil
         karma = nil
+    }
+
+    func isBlocked(_ user: String?) -> Bool { user.map(blockedUsers.contains) ?? false }
+
+    func setBlocked(_ user: String, _ blocked: Bool) {
+        if blocked { blockedUsers.insert(user) } else { blockedUsers.remove(user) }
+        UserDefaults.standard.set(Array(blockedUsers), forKey: "blockedUsers")
+        Extras.note(blocked ? "user_blocked" : "user_unblocked")
     }
 
     /// Runs `action` when signed in; otherwise asks for sign-in first.

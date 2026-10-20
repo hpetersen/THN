@@ -82,8 +82,10 @@ final class CommentsModel {
     enum StoryToggle { case favorite, hide, flag }
 
     /// Favorites, hides or flags the story, or undoes it.
-    func toggle(_ kind: StoryToggle) async {
-        guard let before = storyLinks else { return }
+    /// Toggles a link on the story, or on a comment when `id` is given (flagging).
+    func toggle(_ kind: StoryToggle, id: Int? = nil) async {
+        let id = id ?? story.id
+        guard let before = links[id] else { return }
         let (on, off): (WritableKeyPath<ItemLinks, String?>, WritableKeyPath<ItemLinks, String?>) = switch kind {
         case .favorite: (\.fave, \.unfave)
         case .hide: (\.hide, \.unhide)
@@ -94,15 +96,15 @@ final class CommentsModel {
         var after = before
         after[keyPath: undo ? on : off] = Self.togglingUn(href)
         after[keyPath: undo ? off : on] = nil
-        links[story.id] = after
+        links[id] = after
         do {
             try await HNWeb.act(href)
-            Extras.note("story_action", ["action": "\(kind)", "undo": "\(undo)"])
+            Extras.note(id == story.id ? "story_action" : "comment_action", ["action": "\(kind)", "undo": "\(undo)"])
             if kind == .hide {
                 if undo { HNSession.shared.hiddenStories.remove(story.id) } else { HNSession.shared.hiddenStories.insert(story.id) }
             }
         } catch {
-            links[story.id] = before
+            links[id] = before
             actionError = HNSession.shared.handle(error)
         }
     }
@@ -212,7 +214,7 @@ enum ComposeTarget: Identifiable {
     }
 }
 
-enum CommentAction { case upvote, downvote, unvote, reply, edit, delete }
+enum CommentAction { case upvote, downvote, unvote, reply, edit, delete, report }
 
 struct StoryView: View {
     let story: Story
@@ -223,6 +225,7 @@ struct StoryView: View {
     @State private var composing: ComposeTarget?
     @State private var editingStory = false
     @State private var deleting: Int?
+    @State private var reporting: Comment?
     @Environment(HNSession.self) private var session
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -287,6 +290,24 @@ struct StoryView: View {
                 if let id = deleting { Task { await comments.delete(id) } }
             }
         }
+        .confirmationDialog("Report \(reporting?.author ?? "")'s comment", isPresented: Binding {
+            reporting != nil
+        } set: { if !$0 { reporting = nil } }, titleVisibility: .visible, presenting: reporting) { comment in
+            let links = comments.links[comment.id]
+            if links?.unflag != nil {
+                Button("Unflag") { act { await comments.toggle(.flag, id: comment.id) } }
+            } else if !session.isSignedIn || links?.flag != nil {
+                Button("Flag for Hacker News Moderators") { act { await comments.toggle(.flag, id: comment.id) } }
+            }
+            Button("Report by Email") {
+                let subject = "Reporting comment \(comment.id)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                let body = "https://news.ycombinator.com/item?id=\(comment.id)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                if let url = URL(string: "mailto:hn@ycombinator.com?subject=\(subject)&body=\(body)") { UIApplication.shared.open(url) }
+            }
+            Button("Block \(comment.author)", role: .destructive) { session.setBlocked(comment.author, true) }
+        } message: { _ in
+            Text("Flagging alerts Hacker News moderators. Blocking hides this person's stories and comments on this device.")
+        }
         .alert("Hacker News", isPresented: Binding { comments.actionError != nil } set: { if !$0 { comments.actionError = nil } }) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -334,6 +355,11 @@ struct StoryView: View {
             if links?.delete != nil {
                 Button("Delete Story", systemImage: "trash", role: .destructive) { deleting = story.id }
             }
+            if let by = story.by, by != session.username {
+                Button(session.isBlocked(by) ? "Unblock \(by)" : "Block \(by)", systemImage: "hand.raised") {
+                    session.setBlocked(by, !session.isBlocked(by))
+                }
+            }
             Divider()
             Button("Open on Hacker News", systemImage: "safari") { browserLink = BrowserLink(url: story.hnURL) }
         } label: {
@@ -371,6 +397,7 @@ struct StoryView: View {
                 ForEach(comments.visible) { comment in
                     CommentRow(comment: comment, isOP: comment.author == story.by,
                                isCollapsed: comments.collapsed.contains(comment.id),
+                               isBlocked: session.isBlocked(comment.author),
                                links: comments.links[comment.id], signedIn: session.isSignedIn) {
                         withAnimation(.snappy) { comments.toggle(comment) }
                     } onAction: { action in
@@ -390,6 +417,10 @@ struct StoryView: View {
     }
 
     private func handle(_ action: CommentAction, on comment: Comment) {
+        if action == .report {
+            reporting = comment
+            return
+        }
         session.require {
             switch action {
             case .upvote: Task { await comments.vote(comment.id, "up") }
@@ -398,6 +429,7 @@ struct StoryView: View {
             case .reply: composing = .reply(comment)
             case .edit: composing = .edit(comment)
             case .delete: deleting = comment.id
+            case .report: break
             }
         }
     }
@@ -523,6 +555,7 @@ private struct CommentRow: View {
     let comment: Comment
     let isOP: Bool
     let isCollapsed: Bool
+    let isBlocked: Bool
     let links: ItemLinks?
     let signedIn: Bool
     let toggle: () -> Void
@@ -574,7 +607,11 @@ private struct CommentRow: View {
                     .accessibilityLabel("\(comment.author), \(comment.timeAgo). \(isCollapsed ? "Expand" : "Collapse") thread")
                 }
 
-                if !isCollapsed {
+                if isBlocked, !isCollapsed {
+                    Text("Comment from a user you blocked.")
+                        .font(Theme.body(14).italic())
+                        .foregroundStyle(Theme.muted)
+                } else if !isCollapsed {
                     Text(comment.text)
                         .lineSpacing(2.5)
                         .tint(Theme.accent)
@@ -611,17 +648,16 @@ private struct CommentRow: View {
 
     @ViewBuilder private var actionLine: some View {
         let edit = links?.edit != nil, delete = links?.delete != nil
-        if canReply || edit || delete {
-            HStack(spacing: 18) {
-                if canReply { Button("Reply") { onAction(.reply) } }
-                if edit { Button("Edit") { onAction(.edit) } }
-                if delete { Button("Delete") { onAction(.delete) } }
-            }
-            .font(Theme.body(14).smallCaps().weight(.semibold))
-            .foregroundStyle(Theme.muted)
-            .buttonStyle(.plain)
-            .frame(minHeight: 28)
+        HStack(spacing: 18) {
+            if canReply { Button("Reply") { onAction(.reply) } }
+            if edit { Button("Edit") { onAction(.edit) } }
+            if delete { Button("Delete") { onAction(.delete) } }
+            if !isDeleted, !edit, !delete { Button("Report") { onAction(.report) } }
         }
+        .font(Theme.body(14).smallCaps().weight(.semibold))
+        .foregroundStyle(Theme.muted)
+        .buttonStyle(.plain)
+        .frame(minHeight: 28)
     }
 }
 

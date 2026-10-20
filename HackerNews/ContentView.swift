@@ -6,8 +6,12 @@ struct ContentView: View {
     @State private var session = HNSession.shared
     @Environment(\.scenePhase) private var scenePhase
 
-    /// Launch arguments for device screenshots: `-screen story` or `-screen browser`, `-feed show`.
+    /// Launch arguments for device screenshots (debug builds only): `-screen story|browser|account|search|user:<name>`.
+    #if DEBUG
     private let launchScreen = UserDefaults.standard.string(forKey: "screen")
+    #else
+    private let launchScreen: String? = nil
+    #endif
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -46,9 +50,11 @@ struct ContentView: View {
             if phase == .background { Extras.didEnterBackground() }
         }
         .onAppear {
+            #if DEBUG
             if let feed = UserDefaults.standard.string(forKey: "feed").flatMap(Feed.init(rawValue:)) {
                 frontPage.feed = feed
             }
+            #endif
             switch launchScreen {
             case "account": path.append(AccountRoute())
             case "search": path.append(SearchRoute())

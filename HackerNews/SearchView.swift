@@ -67,8 +67,8 @@ struct SearchView: View {
         .tint(Theme.accent)
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
-            // Screenshot launch argument: `-query rust`.
-            if let q = UserDefaults.standard.string(forKey: "query") {
+            // Screenshot launch argument (debug builds): `-query rust`.
+            if let q = Self.screenshotQuery {
                 query = q
                 run()
             } else {
@@ -78,6 +78,12 @@ struct SearchView: View {
         .onChange(of: kind) { run() }
         .onChange(of: sort) { run() }
     }
+
+    #if DEBUG
+    private static let screenshotQuery = UserDefaults.standard.string(forKey: "query")
+    #else
+    private static let screenshotQuery: String? = nil
+    #endif
 
     private func run() {
         let q = query.trimmingCharacters(in: .whitespaces)
