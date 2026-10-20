@@ -3,6 +3,8 @@ import SwiftUI
 /// Newsprint replacement for the system navigation bar: serif back link, small masthead, plain ink icons.
 struct PaperTopBar<Trailing: View>: View {
     var backTitle = "Front Page"
+    /// A full-width double rule under the bar (the story page), instead of a single hairline.
+    var doubleRule = false
     @ViewBuilder var trailing: Trailing
     @Environment(\.dismiss) private var dismiss
     @State private var width: CGFloat = 400
@@ -36,7 +38,11 @@ struct PaperTopBar<Trailing: View>: View {
             }
             // With no status bar above (iPhone Duo unfolded), keep the controls off the rounded corners.
             .padding(.horizontal, topInset < 24 ? 26 : 10)
-            Rule(color: Theme.ink)
+            if doubleRule {
+                DoubleRule().stretchUnderSideStatus()
+            } else {
+                Rule(color: Theme.ink)
+            }
         }
         .background(Theme.paper)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }

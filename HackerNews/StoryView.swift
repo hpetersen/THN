@@ -258,13 +258,13 @@ struct StoryView: View {
         _comments = State(initialValue: CommentsModel(story: story))
     }
 
-    /// The article opens beside the story only with room for both (iPad, not iPad 11" portrait or iPhone Duo).
-    private var canSplit: Bool { sizeClass == .regular && story.link != nil && width >= 1000 }
+    /// The article opens beside the story when there's room for both (iPad, iPhone Duo unfolded).
+    private var canSplit: Bool { sizeClass == .regular && story.link != nil && width >= 820 }
     private var splitWithBrowser: Bool { canSplit && showArticlePane }
 
     var body: some View {
         VStack(spacing: 0) {
-            PaperTopBar {
+            PaperTopBar(doubleRule: true) {
                 ShareLink(item: story.link ?? story.hnURL) {
                     Image(systemName: "square.and.arrow.up").frame(width: 44, height: 44)
                 }
@@ -282,8 +282,8 @@ struct StoryView: View {
             }
             if splitWithBrowser, let url = story.link {
                 HStack(spacing: 0) {
-                    // The article gets the larger share: about 40% for the story, at most 500pt.
-                    storyColumn.frame(width: min(500, width * 0.4))
+                    // The article gets the larger share: about a third for the story, 320–500pt.
+                    storyColumn.frame(width: min(500, max(320, width * 0.35)))
                     Theme.ink.frame(width: 1)
                     BrowserView(url: url).id(url)
                 }
