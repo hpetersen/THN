@@ -1,0 +1,19 @@
+# Personal signing (team ID, bundle ID)
+Config/Local.xcconfig
+
+# Local-only distribution material (see HackerNews/Extras.swift)
+AppStore/
+HackerNews/Extras/
+Config/Private/
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.xcarchive
+
+# macOS
+.DS_Store

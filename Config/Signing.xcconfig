@@ -1,0 +1,10 @@
+// Signing for THN. Builds from a fresh clone work with Xcode's automatic signing:
+// pick your team in Xcode, or put your own values in Config/Local.xcconfig (git-ignored):
+//
+//   DEVELOPMENT_TEAM = ABCDE12345
+//   PRODUCT_BUNDLE_IDENTIFIER = com.example.thn
+
+DEVELOPMENT_TEAM =
+PRODUCT_BUNDLE_IDENTIFIER = devplaceholder.$(PROJECT_UNIQUE_VALUE:identifier).HackerNews
+
+#include? "Local.xcconfig"
